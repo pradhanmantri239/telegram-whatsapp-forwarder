@@ -1,0 +1,10 @@
+{
+  "telegramBotToken": "123456789:ABCdefGHIjklMNOpqrSTUvwxYZ_from_botfather",
+  "telegramGroups": ["",""],
+  "whatsappGroups": ["",""],
+  "settings": {
+    "messageDelay": 1000,
+    "maxReconnectAttempts": 5,
+    "enableLogging": true
+  }
+}
