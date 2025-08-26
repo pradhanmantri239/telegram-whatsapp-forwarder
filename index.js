@@ -591,3 +591,97 @@ forwarder.start().catch(error => {
     console.error('❌ Unhandled error:', error);
     process.exit(1);
 });
+// Add this at the end of your index.js file
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+
+const app = express();
+const port = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {
+  res.send(`
+    <h1>Telegram-WhatsApp Forwarder Bot</h1>
+    <p>Status: Running</p>
+    <p>Active Clients: ${activeClients.length}</p>
+    <p>Uptime: ${process.uptime()} seconds</p>
+  `);
+});
+
+app.listen(port, () => {
+  console.log(`🚀 Server running on port ${port}`);
+});
+
+// Multi-client management
+const activeClients = [];
+const configsDir = path.join(__dirname, 'configs');
+
+async function loadAndStartAllClients() {
+  try {
+    // Check if configs directory exists
+    if (!fs.existsSync(configsDir)) {
+      console.error('❌ configs directory not found!');
+      return;
+    }
+
+    // Read all JSON files from configs directory
+    const configFiles = fs.readdirSync(configsDir)
+      .filter(file => file.endsWith('.json'));
+
+    console.log(`📋 Found ${configFiles.length} config files`);
+
+    // Start each client
+    for (const configFile of configFiles) {
+      const clientId = path.basename(configFile, '.json');
+      const configPath = path.join(configsDir, configFile);
+      
+      try {
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        console.log(`🚀 Starting ${clientId}...`);
+        
+        const forwarder = new SingleClientForwarder(clientId, config);
+        activeClients.push(forwarder);
+        
+        // Initialize with delay between clients to avoid conflicts
+        setTimeout(async () => {
+          try {
+            await forwarder.initializeWhatsApp();
+            forwarder.initializeTelegram();
+            console.log(`✅ ${clientId} started successfully!`);
+          } catch (error) {
+            console.error(`❌ Error starting ${clientId}:`, error.message);
+          }
+        }, activeClients.length * 10000); // 10 second delay between each client
+
+      } catch (error) {
+        console.error(`❌ Error loading config ${configFile}:`, error.message);
+      }
+    }
+
+    console.log(`🎉 All ${activeClients.length} clients queued for startup`);
+
+  } catch (error) {
+    console.error('❌ Error loading clients:', error.message);
+  }
+}
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  console.log('\n🛑 Shutting down gracefully...');
+  for (const client of activeClients) {
+    try {
+      if (client.whatsappClient) {
+        await client.whatsappClient.destroy();
+      }
+      if (client.telegramBot) {
+        client.telegramBot.stopPolling();
+      }
+    } catch (error) {
+      console.error(`Error shutting down client:`, error.message);
+    }
+  }
+  process.exit(0);
+});
+
+// Start all clients
+loadAndStartAllClients();
