@@ -392,10 +392,10 @@ class SingleClientForwarder {
 class MultiClientForwarder {
   constructor() {
     this.clients = new Map();
-    this.rl = readline.createInterface({
+    /*this.rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout
-    });
+    });*/
   }
 
   async loadConfigs() {
@@ -573,9 +573,9 @@ class MultiClientForwarder {
       // Auto-show status every 30 seconds
       setInterval(() => {
         this.showStatus();
-      }, 30000);
+      }, 60000);
 
-      this.startControlInterface();
+      console.log('🎉 Bot running in server mode - check logs for status updates');
 
       // Handle graceful shutdown
       process.on("SIGINT", async () => {
