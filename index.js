@@ -585,12 +585,6 @@ class MultiClientForwarder {
   }
 }
 
-// Start the multi-client forwarder
-const forwarder = new MultiClientForwarder();
-forwarder.start().catch(error => {
-    console.error('❌ Unhandled error:', error);
-    process.exit(1);
-});
 // Express web server for Render deployment
 const express = require('express');
 const app = express();
