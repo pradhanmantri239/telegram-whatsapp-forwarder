@@ -593,7 +593,6 @@ forwarder.start().catch(error => {
 });
 // Add this at the end of your index.js file
 const express = require('express');
-const fs = require('fs');
 const path = require('path');
 
 const app = express();
@@ -625,8 +624,8 @@ async function loadAndStartAllClients() {
     }
 
     // Read all JSON files from configs directory
-    const configFiles = fs.readdirSync(configsDir)
-      .filter(file => file.endsWith('.json'));
+    const configFiles = await fs.readdir(configsDir);
+    const jsonFiles = configFiles.filter(file => file.endsWith('.json'));
 
     console.log(`📋 Found ${configFiles.length} config files`);
 
@@ -636,7 +635,8 @@ async function loadAndStartAllClients() {
       const configPath = path.join(configsDir, configFile);
       
       try {
-        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        const configData = await fs.readFile(configPath, 'utf8');
+        const config = JSON.parse(configData);
         console.log(`🚀 Starting ${clientId}...`);
         
         const forwarder = new SingleClientForwarder(clientId, config);
