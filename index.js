@@ -55,7 +55,11 @@ class SingleClientForwarder {
 
         this.whatsappClient.on("qr", (qr) => {
             console.log(`\n📱 [${this.clientId}] Scan this QR code with your WhatsApp:`);
-            qrcode.generate(qr, { small: true });
+            qrcode.generate(qr, { small: true, });
+            // QR code URL as backup
+            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`;
+            console.log(`\n🔗 [${this.clientId}] If QR is too big, open this URL: ${qrUrl}`);
+            console.log(`\n[${this.clientId}] After scanning, the client will connect automatically...\n`);
             console.log(`\n[${this.clientId}] After scanning, the client will connect automatically...\n`);
         });
 
