@@ -46,29 +46,35 @@ class SingleClientForwarder {
                     "--disable-backgrounding-occluded-windows",
                     "--disable-renderer-backgrounding",
                     "--disable-extensions",
+                    "--disable-blink-features=AutomationControlled",
+                    "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
                 ],
                 handleSIGINT: false,
                 handleSIGTERM: false,
                 handleSIGHUP: false,
             },
+            webVersionCache: {
+                type: 'remote',
+                remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
+            }
         });
 
         this.whatsappClient.on("qr", (qr) => {
-            console.log(`\n📱 [${this.clientId}] Scan this QR code with your WhatsApp:`);
-            qrcode.generate(qr, { small: true, });
-            // QR code URL as backup
-            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`;
-            console.log(`\n🔗 [${this.clientId}] If QR is too big, open this URL: ${qrUrl}`);
-            console.log(`\n[${this.clientId}] After scanning, the client will connect automatically...\n`);
-            console.log(`\n[${this.clientId}] After scanning, the client will connect automatically...\n`);
+            console.log(`\n📱 [${this.clientId}] NEW QR CODE - Previous one expired, use this fresh one:`);
+            qrcode.generate(qr, { small: true });
+    
+            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(qr)}`;
+            console.log(`\n🔗 [${this.clientId}] Fresh QR URL: ${qrUrl}`);
+            console.log(`\n⚠️ [${this.clientId}] IMPORTANT: Scan within 20 seconds or it will expire!`);
+            console.log(`\n[${this.clientId}] After scanning, wait for connection...\n`);
         });
 
-        this.whatsappClient.on("ready", async () => {
-            console.log(`✅ [${this.clientId}] WhatsApp client is ready!`);
-            this.isWhatsAppReady = true;
-            this.reconnectAttempts = 0;
-            await this.displayAvailableChats();
-            this.processMessageQueue();
+        this.whatsappClient.on('loading_screen', (percent, message) => {
+            console.log(`⏳ [${this.clientId}] Loading: ${percent}% - ${message}`);
+        });
+
+        this.whatsappClient.on('change_state', state => {
+           console.log(`🔄 [${this.clientId}] Connection state: ${state}`);
         });
 
         this.whatsappClient.on("authenticated", () => {
