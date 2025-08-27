@@ -3,7 +3,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const qrcode = require('qrcode-terminal');
 const fs = require('fs').promises;
 const path = require('path');
-const readline = require('readline');
+const express = require('express');
 
 class SingleClientForwarder {
   constructor(clientId, config) {
@@ -21,85 +21,13 @@ class SingleClientForwarder {
     this.totalMessages = 0;
     this.failedMessages = 0;
   }
-    async initializeWhatsApp() {
-        console.log(`🚀 [${this.clientId}] Initializing WhatsApp client...`);
 
-        this.whatsappClient = new Client({
-            authStrategy: new LocalAuth({
-                clientId: `${this.clientId}`, // Fixed - no Date.now()
-                dataPath: `./sessions/${this.clientId}`,
-            }),
-            puppeteer: {
-                headless: true,
-                args: [
-                    "--no-sandbox",
-                    "--disable-setuid-sandbox",
-                    "--disable-dev-shm-usage",
-                    "--disable-accelerated-2d-canvas",
-                    "--no-first-run",
-                    "--no-zygote",
-                    "--single-process",
-                    "--disable-gpu",
-                    "--disable-web-security",
-                    "--disable-features=VizDisplayCompositor",
-                    "--disable-background-timer-throttling",
-                    "--disable-backgrounding-occluded-windows",
-                    "--disable-renderer-backgrounding",
-                    "--disable-extensions",
-                    "--disable-blink-features=AutomationControlled",
-                    "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-                ],
-                handleSIGINT: false,
-                handleSIGTERM: false,
-                handleSIGHUP: false,
-            },
-            webVersionCache: {
-                type: 'remote',
-                remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
-            }
-        });
-
-        this.whatsappClient.on("qr", (qr) => {
-            console.log(`\n📱 [${this.clientId}] NEW QR CODE - Previous one expired, use this fresh one:`);
-            qrcode.generate(qr, { small: true });
-    
-            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(qr)}`;
-            console.log(`\n🔗 [${this.clientId}] Fresh QR URL: ${qrUrl}`);
-            console.log(`\n⚠️ [${this.clientId}] IMPORTANT: Scan within 20 seconds or it will expire!`);
-            console.log(`\n[${this.clientId}] After scanning, wait for connection...\n`);
-        });
-
-        this.whatsappClient.on('loading_screen', (percent, message) => {
-            console.log(`⏳ [${this.clientId}] Loading: ${percent}% - ${message}`);
-        });
-
-        this.whatsappClient.on('change_state', state => {
-           console.log(`🔄 [${this.clientId}] Connection state: ${state}`);
-        });
-
-        this.whatsappClient.on("authenticated", () => {
-            console.log(`✅ [${this.clientId}] WhatsApp authenticated successfully`);
-        });
-
-        this.whatsappClient.on("auth_failure", (msg) => {
-            console.error(`❌ [${this.clientId}] WhatsApp authentication failed:`, msg);
-            this.handleWhatsAppReconnect();
-        });
-
-        this.whatsappClient.on("disconnected", (reason) => {
-            console.log(`⚠️  [${this.clientId}] WhatsApp disconnected:`, reason);
-            this.isWhatsAppReady = false;
-            this.handleWhatsAppReconnect();
-        });
-
-        await this.whatsappClient.initialize();
-    }
-  /*async initializeWhatsApp() {
+  async initializeWhatsApp() {
     console.log(`🚀 [${this.clientId}] Initializing WhatsApp client...`);
-
+    
     this.whatsappClient = new Client({
       authStrategy: new LocalAuth({
-        clientId: `${this.clientId}-${Date.now()}`,
+        clientId: `${this.clientId}`, // Fixed - no Date.now()
         dataPath: `./sessions/${this.clientId}`,
       }),
       puppeteer: {
@@ -119,25 +47,43 @@ class SingleClientForwarder {
           "--disable-backgrounding-occluded-windows",
           "--disable-renderer-backgrounding",
           "--disable-extensions",
+          "--disable-blink-features=AutomationControlled",
+          "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
         ],
         handleSIGINT: false,
         handleSIGTERM: false,
         handleSIGHUP: false,
       },
+      webVersionCache: {
+        type: 'remote',
+        remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
+      }
     });
 
     this.whatsappClient.on("qr", (qr) => {
-      console.log(`\n📱 [${this.clientId}] Scan this QR code with WhatsApp:`);
+      console.log(`\n📱 [${this.clientId}] NEW QR CODE - Previous one expired, use this fresh one:`);
       qrcode.generate(qr, { small: true });
-      console.log(`\n[${this.clientId}] After scanning, the client will connect automatically...\n`);
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(qr)}`;
+      console.log(`\n🔗 [${this.clientId}] Fresh QR URL: ${qrUrl}`);
+      console.log(`\n⚠️ [${this.clientId}] IMPORTANT: Scan within 20 seconds or it will expire!`);
+      console.log(`\n[${this.clientId}] After scanning, wait for connection...\n`);
     });
 
+    // FIXED: Uncommented the ready event handler
     this.whatsappClient.on("ready", async () => {
       console.log(`✅ [${this.clientId}] WhatsApp client is ready!`);
       this.isWhatsAppReady = true;
       this.reconnectAttempts = 0;
       await this.displayAvailableChats();
       this.processMessageQueue();
+    });
+
+    this.whatsappClient.on('loading_screen', (percent, message) => {
+      console.log(`⏳ [${this.clientId}] Loading: ${percent}% - ${message}`);
+    });
+
+    this.whatsappClient.on('change_state', state => {
+      console.log(`🔄 [${this.clientId}] Connection state: ${state}`);
     });
 
     this.whatsappClient.on("authenticated", () => {
@@ -150,22 +96,22 @@ class SingleClientForwarder {
     });
 
     this.whatsappClient.on("disconnected", (reason) => {
-      console.log(`⚠️  [${this.clientId}] WhatsApp disconnected:`, reason);
+      console.log(`⚠️ [${this.clientId}] WhatsApp disconnected:`, reason);
       this.isWhatsAppReady = false;
       this.handleWhatsAppReconnect();
     });
 
     await this.whatsappClient.initialize();
-  }*/
+  }
 
   async displayAvailableChats() {
     try {
       const chats = await this.whatsappClient.getChats();
       const groups = chats.filter((chat) => chat.isGroup);
-
+      
       console.log(`\n📋 [${this.clientId}] Available WhatsApp Groups:`);
       console.log("=====================================");
-
+      
       if (groups.length === 0) {
         console.log(`[${this.clientId}] No groups found.`);
         return;
@@ -203,7 +149,7 @@ class SingleClientForwarder {
 
   initializeTelegram() {
     console.log(`🚀 [${this.clientId}] Initializing Telegram bot...`);
-
+    
     this.telegramBot = new TelegramBot(this.config.telegramBotToken, {
       polling: true,
     });
@@ -307,62 +253,57 @@ class SingleClientForwarder {
 
     for (let i = 0; i < this.config.whatsappGroups.length; i++) {
       const groupId = this.config.whatsappGroups[i];
-
+      
       try {
-        if (messageInfo.type === "text") {
+        if (messageInfo.type === "text" && messageText) {
           await this.whatsappClient.sendMessage(groupId, messageText);
-        } else {
-          await this.forwardMediaMessage(groupId, messageInfo, messageText);
+          console.log(`✅ [${this.clientId}] Text message sent to WhatsApp group ${i + 1}`);
+        } else if (messageInfo.fileId) {
+          const fileBuffer = await this.downloadTelegramFile(messageInfo.fileId);
+          if (fileBuffer) {
+            const media = new MessageMedia('application/octet-stream', fileBuffer.toString('base64'), messageInfo.fileName || 'file');
+            await this.whatsappClient.sendMessage(groupId, media, { caption: messageText || "" });
+            console.log(`✅ [${this.clientId}] Media message sent to WhatsApp group ${i + 1}`);
+          }
         }
 
-        console.log(`✅ [${this.clientId}] Message forwarded to group: ${groupId.substring(0, 20)}...`);
         this.totalMessages++;
-
-        if (i < this.config.whatsappGroups.length - 1) {
-          const groupDelay = Math.floor(Math.random() * 4000) + 1000;
-          console.log(`⏳ [${this.clientId}] Waiting ${groupDelay}ms before next group...`);
-          await this.sleep(groupDelay);
-        }
       } catch (error) {
-        console.error(`❌ [${this.clientId}] Failed to forward to group ${groupId}:`, error.message);
+        console.error(`❌ [${this.clientId}] Failed to send message to group ${i + 1}:`, error.message);
         this.failedMessages++;
+      }
 
-        if (i < this.config.whatsappGroups.length - 1) {
-          const groupDelay = Math.floor(Math.random() * 4000) + 1000;
-          await this.sleep(groupDelay);
-        }
+      if (i < this.config.whatsappGroups.length - 1) {
+        await this.sleep(1000);
       }
     }
   }
 
-  async forwardMediaMessage(groupId, messageInfo, captionText) {
+  async downloadTelegramFile(fileId) {
     try {
-      const fileLink = await this.telegramBot.getFileLink(messageInfo.fileId);
-      const media = await MessageMedia.fromUrl(fileLink);
-
-      if (messageInfo.fileName) {
-        media.filename = messageInfo.fileName;
-      }
-
-      await this.whatsappClient.sendMessage(groupId, media, { caption: captionText });
+      const fileInfo = await this.telegramBot.getFile(fileId);
+      const fileBuffer = await this.telegramBot.downloadFile(fileId, './temp/');
+      return fileBuffer;
     } catch (error) {
-      console.error(`❌ [${this.clientId}] Error forwarding media:`, error.message);
-      const randomVariation = this.messageVariations[Math.floor(Math.random() * this.messageVariations.length)];
-      const fallbackText = captionText + `\n\n📎 *Media file (${messageInfo.type})* could not be forwarded.` + randomVariation;
-      await this.whatsappClient.sendMessage(groupId, fallbackText);
+      console.error(`❌ [${this.clientId}] Error downloading file:`, error.message);
+      return null;
     }
   }
 
-  // Client control methods
+  sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // Control methods
   pause() {
     this.isActive = false;
-    console.log(`⏸️ [${this.clientId}] Forwarding PAUSED`);
+    console.log(`⏸️ [${this.clientId}] Forwarding paused`);
   }
 
   resume() {
     this.isActive = true;
-    console.log(`▶️ [${this.clientId}] Forwarding RESUMED`);
-    if (!this.isProcessingQueue && this.messageQueue.length > 0) {
+    console.log(`▶️ [${this.clientId}] Forwarding resumed`);
+    if (this.messageQueue.length > 0 && !this.isProcessingQueue) {
       this.processMessageQueue();
     }
   }
@@ -370,263 +311,180 @@ class SingleClientForwarder {
   getStatus() {
     return {
       clientId: this.clientId,
-      isActive: this.isActive,
       isWhatsAppReady: this.isWhatsAppReady,
+      isActive: this.isActive,
       queueLength: this.messageQueue.length,
       totalMessages: this.totalMessages,
       failedMessages: this.failedMessages,
-      whatsappGroups: this.config.whatsappGroups?.length || 0,
-      telegramGroups: this.config.telegramGroups?.length || 0
+      isProcessingQueue: this.isProcessingQueue
     };
-  }
-
-  async destroy() {
-    console.log(`🛑 [${this.clientId}] Shutting down...`);
-    if (this.whatsappClient) {
-      await this.whatsappClient.destroy();
-    }
-    if (this.telegramBot) {
-      this.telegramBot.stopPolling();
-    }
-  }
-
-  sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
 
-class MultiClientForwarder {
+class MultiClientManager {
   constructor() {
-    this.clients = new Map();
-    /*this.rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout
-    });*/
+    this.clients = [];
+    this.configPath = './configs';
+  }
+
+  async initialize() {
+    try {
+      await this.loadConfigs();
+      await this.startAllClients();
+    } catch (error) {
+      console.error('❌ Error initializing multi-client manager:', error.message);
+    }
   }
 
   async loadConfigs() {
     try {
-      const files = await fs.readdir('./configs');
+      const files = await fs.readdir(this.configPath);
       const configFiles = files.filter(file => file.endsWith('.json'));
 
-      if (configFiles.length === 0) {
-        console.log('❌ No config files found in ./configs/ directory');
-        console.log('📝 Create config files like: client1.json, client2.json, etc.');
-        process.exit(1);
+      for (const file of configFiles) {
+        const configPath = path.join(this.configPath, file);
+        const configData = await fs.readFile(configPath, 'utf8');
+        const config = JSON.parse(configData);
+        const clientId = path.basename(file, '.json');
+
+        const client = new SingleClientForwarder(clientId, config);
+        this.clients.push(client);
+        console.log(`📋 Loaded config for client: ${clientId}`);
       }
-
-      for (const configFile of configFiles) {
-        try {
-          const configData = await fs.readFile(`./configs/${configFile}`, 'utf8');
-          const config = JSON.parse(configData);
-          const clientId = configFile.replace('.json', '');
-          
-          if (!config.telegramBotToken) {
-            console.log(`⚠️ [${clientId}] Missing telegram bot token, skipping...`);
-            continue;
-          }
-
-          console.log(`✅ Loaded config for client: ${clientId}`);
-          const client = new SingleClientForwarder(clientId, config);
-          this.clients.set(clientId, client);
-        } catch (error) {
-          console.error(`❌ Error loading ${configFile}:`, error.message);
-        }
-      }
-
-      console.log(`\n🎯 Total clients loaded: ${this.clients.size}\n`);
     } catch (error) {
-      console.error('❌ Error reading configs directory:', error.message);
-      console.log('📁 Please create ./configs/ directory with client config files');
-      process.exit(1);
+      console.error('❌ Error loading configs:', error.message);
     }
   }
 
   async startAllClients() {
-    for (const [clientId, client] of this.clients) {
+    console.log(`🚀 Starting ${this.clients.length} clients...`);
+    
+    for (let i = 0; i < this.clients.length; i++) {
+      const client = this.clients[i];
+      
       try {
         await client.initializeWhatsApp();
         client.initializeTelegram();
+        
+        if (i < this.clients.length - 1) {
+          console.log(`⏳ Waiting 10 seconds before starting next client...`);
+          await this.sleep(10000);
+        }
       } catch (error) {
-        console.error(`❌ [${clientId}] Failed to start:`, error.message);
+        console.error(`❌ Error starting client ${client.clientId}:`, error.message);
       }
     }
   }
 
-  // Control methods
-  pauseClient(clientId) {
-    const client = this.clients.get(clientId);
-    if (client) {
-      client.pause();
-      return true;
-    }
-    return false;
-  }
-
-  resumeClient(clientId) {
-    const client = this.clients.get(clientId);
-    if (client) {
-      client.resume();
-      return true;
-    }
-    return false;
+  sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   getAllStatus() {
-    const statuses = [];
-    for (const [clientId, client] of this.clients) {
-      statuses.push(client.getStatus());
-    }
-    return statuses;
+    return this.clients.map(client => client.getStatus());
   }
 
-  showStatus() {
-    console.log('\n📊 CLIENT STATUS DASHBOARD');
-    console.log('============================');
-    
-    const statuses = this.getAllStatus();
-    statuses.forEach(status => {
-      const activeIcon = status.isActive ? '✅' : '⏸️';
-      const whatsappIcon = status.isWhatsAppReady ? '🟢' : '🔴';
-      
-      console.log(`${activeIcon} ${status.clientId} | WA:${whatsappIcon} | Queue:${status.queueLength} | Sent:${status.totalMessages} | Failed:${status.failedMessages}`);
-    });
-    console.log('============================\n');
-  }
-
-  startControlInterface() {
-    console.log('\n🎮 CONTROL COMMANDS:');
-    console.log('- status : Show all clients status');
-    console.log('- pause [clientId] : Pause specific client');
-    console.log('- resume [clientId] : Resume specific client');
-    console.log('- list : List all clients');
-    console.log('- quit : Exit application');
-    console.log('========================\n');
-
-    const handleCommand = (input) => {
-      const [command, clientId] = input.trim().split(' ');
-
-      switch (command.toLowerCase()) {
-        case 'status':
-          this.showStatus();
-          break;
-
-        case 'pause':
-          if (clientId) {
-            if (this.pauseClient(clientId)) {
-              console.log(`✅ Client ${clientId} paused`);
-            } else {
-              console.log(`❌ Client ${clientId} not found`);
-            }
-          } else {
-            console.log('❌ Please specify clientId: pause client1');
-          }
-          break;
-
-        case 'resume':
-          if (clientId) {
-            if (this.resumeClient(clientId)) {
-              console.log(`✅ Client ${clientId} resumed`);
-            } else {
-              console.log(`❌ Client ${clientId} not found`);
-            }
-          } else {
-            console.log('❌ Please specify clientId: resume client1');
-          }
-          break;
-
-        case 'list':
-          console.log('📋 Available clients:');
-          for (const clientId of this.clients.keys()) {
-            console.log(`- ${clientId}`);
-          }
-          break;
-
-        case 'quit':
-          console.log('🛑 Shutting down all clients...');
-          this.shutdown();
-          return;
-
-        default:
-          console.log('❌ Unknown command. Type "status", "pause", "resume", "list", or "quit"');
-      }
-
-      this.rl.question('💬 Command: ', handleCommand);
-    };
-
-    this.rl.question('💬 Command: ', handleCommand);
-  }
-
-  async shutdown() {
-    for (const [clientId, client] of this.clients) {
-      await client.destroy();
-    }
-    this.rl.close();
-    process.exit(0);
-  }
-
-  async start() {
-    console.log('🤖 Starting Multi-Client Telegram to WhatsApp Forwarder...\n');
-
-    try {
-      await this.loadConfigs();
-      await this.startAllClients();
-
-      console.log('\n✅ All clients initialized!');
-      console.log('📱 Scan QR codes above for each client');
-      console.log('🔄 All forwarders are now running...\n');
-
-      // Auto-show status every 30 seconds
-      setInterval(() => {
-        this.showStatus();
-      }, 60000);
-
-      console.log('🎉 Bot running in server mode - check logs for status updates');
-
-      // Handle graceful shutdown
-      process.on("SIGINT", async () => {
-        await this.shutdown();
-      });
-
-    } catch (error) {
-      console.error('❌ Failed to start application:', error.message);
-      process.exit(1);
-    }
+  getClient(clientId) {
+    return this.clients.find(client => client.clientId === clientId);
   }
 }
 
-// Express web server for Render deployment
-const express = require('express');
+// Express server setup
 const app = express();
-const port = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000;
 
-// Create single forwarder instance
-const forwarder = new MultiClientForwarder();
+app.use(express.json());
 
+// Global manager instance
+const manager = new MultiClientManager();
+
+// FIXED: Added web endpoint to show status
 app.get('/', (req, res) => {
-  const statuses = forwarder.getAllStatus();
-  res.send(`
-    <h1>Telegram-WhatsApp Forwarder Bot</h1>
-    <p>Status: Running</p>
-    <p>Active Clients: ${statuses.length}</p>
-    <p>Total Messages Sent: ${statuses.reduce((sum, s) => sum + s.totalMessages, 0)}</p>
-    <p>Uptime: ${Math.floor(process.uptime())} seconds</p>
-    <hr>
-    <h3>Client Status:</h3>
-    ${statuses.map(s => `
-      <p>${s.clientId}: ${s.isActive ? '✅ Active' : '⏸️ Paused'} | 
-      WhatsApp: ${s.isWhatsAppReady ? '🟢 Ready' : '🔴 Not Ready'} | 
-      Sent: ${s.totalMessages}</p>
-    `).join('')}
-  `);
+  const clientStatus = manager.getAllStatus();
+  
+  res.json({
+    status: 'Bot is running',
+    timestamp: new Date().toISOString(),
+    clients: clientStatus,
+    summary: {
+      totalClients: clientStatus.length,
+      readyClients: clientStatus.filter(c => c.isWhatsAppReady).length,
+      activeClients: clientStatus.filter(c => c.isActive).length
+    }
+  });
 });
 
-app.listen(port, () => {
-  console.log(`🚀 Express server running on port ${port}`);
+// Status endpoint
+app.get('/status', (req, res) => {
+  res.json(manager.getAllStatus());
 });
 
-// Start the single forwarder instance
-forwarder.start().catch(error => {
-    console.error('❌ Unhandled error:', error);
-    process.exit(1);
+// Control endpoints
+app.post('/client/:clientId/pause', (req, res) => {
+  const client = manager.getClient(req.params.clientId);
+  if (client) {
+    client.pause();
+    res.json({ success: true, message: `Client ${req.params.clientId} paused` });
+  } else {
+    res.status(404).json({ success: false, message: 'Client not found' });
+  }
+});
+
+app.post('/client/:clientId/resume', (req, res) => {
+  const client = manager.getClient(req.params.clientId);
+  if (client) {
+    client.resume();
+    res.json({ success: true, message: `Client ${req.params.clientId} resumed` });
+  } else {
+    res.status(404).json({ success: false, message: 'Client not found' });
+  }
+});
+
+// Start server and initialize clients
+app.listen(PORT, async () => {
+  console.log(`🌐 Server running on port ${PORT}`);
+  console.log(`🔗 Access status at: http://localhost:${PORT}`);
+  
+  // Initialize the multi-client manager
+  await manager.initialize();
+});
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  console.log('\n🛑 Graceful shutdown initiated...');
+  
+  for (const client of manager.clients) {
+    try {
+      if (client.whatsappClient) {
+        await client.whatsappClient.destroy();
+      }
+      if (client.telegramBot) {
+        await client.telegramBot.stopPolling();
+      }
+    } catch (error) {
+      console.error(`❌ Error during shutdown for client ${client.clientId}:`, error.message);
+    }
+  }
+  
+  console.log('✅ Shutdown complete');
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('\n🛑 SIGTERM received, shutting down...');
+  
+  for (const client of manager.clients) {
+    try {
+      if (client.whatsappClient) {
+        await client.whatsappClient.destroy();
+      }
+      if (client.telegramBot) {
+        await client.telegramBot.stopPolling();
+      }
+    } catch (error) {
+      console.error(`❌ Error during shutdown for client ${client.clientId}:`, error.message);
+    }
+  }
+  
+  process.exit(0);
 });
