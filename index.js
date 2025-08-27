@@ -17,10 +17,10 @@ class SingleClientForwarder {
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 5;
     this.messageVariations = ["", " ", ".", "...", " ."];
-    this.isActive = true; // Control forwarding
+    this.isActive = true;
     this.totalMessages = 0;
     this.failedMessages = 0;
-    this.availableGroups = []; // Store available groups
+    this.availableGroups = [];
   }
 
   async initializeWhatsApp() {
@@ -28,7 +28,7 @@ class SingleClientForwarder {
     
     this.whatsappClient = new Client({
       authStrategy: new LocalAuth({
-        clientId: `${this.clientId}`, // Fixed - no Date.now()
+        clientId: `${this.clientId}`,
         dataPath: `./sessions/${this.clientId}`,
       }),
       puppeteer: {
@@ -70,20 +70,17 @@ class SingleClientForwarder {
       console.log(`\n[${this.clientId}] After scanning, wait for connection...\n`);
     });
 
-    // Enhanced ready event handler with better error handling
     this.whatsappClient.on("ready", async () => {
       console.log(`✅ [${this.clientId}] WhatsApp client is ready!`);
       this.isWhatsAppReady = true;
       this.reconnectAttempts = 0;
       
-      // Add delay to ensure WhatsApp is fully loaded
       setTimeout(async () => {
         try {
           await this.displayAvailableChats();
           this.processMessageQueue();
         } catch (error) {
           console.error(`❌ [${this.clientId}] Error displaying chats:`, error.message);
-          // Retry after 5 seconds
           setTimeout(async () => {
             try {
               await this.displayAvailableChats();
@@ -92,7 +89,7 @@ class SingleClientForwarder {
             }
           }, 5000);
         }
-      }, 3000); // Wait 3 seconds after ready event
+      }, 3000);
     });
 
     this.whatsappClient.on('loading_screen', (percent, message) => {
@@ -115,7 +112,7 @@ class SingleClientForwarder {
     this.whatsappClient.on("disconnected", (reason) => {
       console.log(`⚠️ [${this.clientId}] WhatsApp disconnected:`, reason);
       this.isWhatsAppReady = false;
-      this.availableGroups = []; // Clear groups on disconnect
+      this.availableGroups = [];
       this.handleWhatsAppReconnect();
     });
 
@@ -126,15 +123,12 @@ class SingleClientForwarder {
     try {
       console.log(`📋 [${this.clientId}] Fetching WhatsApp chats...`);
       
-      // Get all chats
       const chats = await this.whatsappClient.getChats();
       console.log(`📊 [${this.clientId}] Total chats found: ${chats.length}`);
       
-      // Filter groups
       const groups = chats.filter((chat) => chat.isGroup);
       console.log(`📊 [${this.clientId}] Groups found: ${groups.length}`);
       
-      // Store groups for API access
       this.availableGroups = groups.map(group => ({
         name: group.name,
         id: group.id._serialized,
@@ -159,7 +153,6 @@ class SingleClientForwarder {
       });
       console.log("=====================================\n");
       
-      // Also display individual chats count
       const individualChats = chats.filter(chat => !chat.isGroup);
       console.log(`📊 [${this.clientId}] Individual chats: ${individualChats.length}`);
       console.log(`📊 [${this.clientId}] Total chats: ${chats.length}\n`);
@@ -168,7 +161,6 @@ class SingleClientForwarder {
       console.error(`❌ [${this.clientId}] Error getting chats:`, error.message);
       console.error(`❌ [${this.clientId}] Error details:`, error);
       
-      // Try alternative method
       try {
         console.log(`🔄 [${this.clientId}] Trying alternative method to get chats...`);
         const state = await this.whatsappClient.getState();
@@ -292,61 +284,150 @@ class SingleClientForwarder {
   }
 
   async forwardToWhatsApp(messageInfo) {
-    if (!this.config.whatsappGroups || this.config.whatsappGroups.length === 0) {
-      console.log(`⚠️ [${this.clientId}] No WhatsApp groups configured, skipping message`);
-      return;
-    }
-
-    let messageText = messageInfo.text;
-    if (messageText) {
-      const randomVariation = this.messageVariations[Math.floor(Math.random() * this.messageVariations.length)];
-      messageText = messageInfo.text + randomVariation;
-    }
-
-    for (let i = 0; i < this.config.whatsappGroups.length; i++) {
-      const groupId = this.config.whatsappGroups[i];
-      
-      try {
-        if (messageInfo.type === "text" && messageText) {
-          await this.whatsappClient.sendMessage(groupId, messageText);
-          console.log(`✅ [${this.clientId}] Text message sent to WhatsApp group ${i + 1}`);
-        } else if (messageInfo.fileId) {
-          const fileBuffer = await this.downloadTelegramFile(messageInfo.fileId);
-          if (fileBuffer) {
-            const media = new MessageMedia('application/octet-stream', fileBuffer.toString('base64'), messageInfo.fileName || 'file');
-            await this.whatsappClient.sendMessage(groupId, media, { caption: messageText || "" });
-            console.log(`✅ [${this.clientId}] Media message sent to WhatsApp group ${i + 1}`);
-          }
-        }
-
-        this.totalMessages++;
-      } catch (error) {
-        console.error(`❌ [${this.clientId}] Failed to send message to group ${i + 1}:`, error.message);
-        this.failedMessages++;
-      }
-
-      if (i < this.config.whatsappGroups.length - 1) {
-        await this.sleep(1000);
-      }
-    }
+  if (!this.config.whatsappGroups || this.config.whatsappGroups.length === 0) {
+    console.log(`⚠️ [${this.clientId}] No WhatsApp groups configured, skipping message`);
+    return;
   }
 
+  let messageText = messageInfo.text;
+  if (messageText) {
+    const randomVariation = this.messageVariations[Math.floor(Math.random() * this.messageVariations.length)];
+    messageText = messageInfo.text + randomVariation;
+  }
+
+  for (let i = 0; i < this.config.whatsappGroups.length; i++) {
+    const groupId = this.config.whatsappGroups[i];
+    
+    try {
+      if (messageInfo.type === "text" && messageText) {
+        // Disable link preview for text messages
+        await this.whatsappClient.sendMessage(groupId, messageText, { linkPreview: false });
+        console.log(`✅ [${this.clientId}] Text message sent to WhatsApp group ${i + 1} (no preview)`);
+      } else if (messageInfo.fileId) {
+        console.log(`📎 [${this.clientId}] Processing ${messageInfo.type} file...`);
+        const mediaData = await this.downloadTelegramFile(messageInfo.fileId);
+        if (mediaData) {
+          const media = new MessageMedia(
+            mediaData.mimeType || this.getMimeType(messageInfo.type), 
+            mediaData.buffer.toString('base64'), 
+            mediaData.fileName || messageInfo.fileName || `file.${this.getFileExtension(messageInfo.type)}`
+          );
+          // Disable link preview for media captions
+          await this.whatsappClient.sendMessage(groupId, media, { 
+            caption: messageText || "",
+            linkPreview: false
+          });
+          console.log(`✅ [${this.clientId}] ${messageInfo.type} message sent to WhatsApp group ${i + 1} (no preview)`);
+        } else {
+          console.log(`❌ [${this.clientId}] Failed to download ${messageInfo.type} file`);
+          this.failedMessages++;
+          continue;
+        }
+      }
+
+      this.totalMessages++;
+    } catch (error) {
+      console.error(`❌ [${this.clientId}] Failed to send message to group ${i + 1}:`, error.message);
+      this.failedMessages++;
+    }
+
+    if (i < this.config.whatsappGroups.length - 1) {
+      await this.sleep(1000);
+    }
+  }
+}
+  // FIXED: Improved file download method
   async downloadTelegramFile(fileId) {
     try {
+      console.log(`📥 [${this.clientId}] Downloading file: ${fileId}`);
+      
+      // Get file info
       const fileInfo = await this.telegramBot.getFile(fileId);
-      const fileBuffer = await this.telegramBot.downloadFile(fileId, './temp/');
-      return fileBuffer;
+      console.log(`📋 [${this.clientId}] File info:`, {
+        file_path: fileInfo.file_path,
+        file_size: fileInfo.file_size
+      });
+      
+      // Download file as stream/buffer instead of saving to disk
+      const fileBuffer = await this.telegramBot.downloadFile(fileId);
+      
+      if (!fileBuffer) {
+        throw new Error('Failed to download file buffer');
+      }
+      
+      console.log(`✅ [${this.clientId}] File downloaded successfully, size: ${fileBuffer.length} bytes`);
+      
+      // Determine MIME type from file path
+      const mimeType = this.getMimeTypeFromPath(fileInfo.file_path);
+      const fileName = path.basename(fileInfo.file_path);
+      
+      return {
+        buffer: fileBuffer,
+        mimeType: mimeType,
+        fileName: fileName,
+        size: fileBuffer.length
+      };
+      
     } catch (error) {
       console.error(`❌ [${this.clientId}] Error downloading file:`, error.message);
       return null;
     }
   }
 
+  // Helper method to get MIME type from file path
+  getMimeTypeFromPath(filePath) {
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeTypes = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.mp4': 'video/mp4',
+      '.avi': 'video/avi',
+      '.mov': 'video/quicktime',
+      '.mp3': 'audio/mpeg',
+      '.wav': 'audio/wav',
+      '.ogg': 'audio/ogg',
+      '.pdf': 'application/pdf',
+      '.doc': 'application/msword',
+      '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      '.txt': 'text/plain'
+    };
+    
+    return mimeTypes[ext] || 'application/octet-stream';
+  }
+
+  // Helper method to get MIME type from message type
+  getMimeType(type) {
+    const types = {
+      'photo': 'image/jpeg',
+      'video': 'video/mp4',
+      'audio': 'audio/mpeg',
+      'voice': 'audio/ogg',
+      'document': 'application/octet-stream'
+    };
+    
+    return types[type] || 'application/octet-stream';
+  }
+
+  // Helper method to get file extension
+  getFileExtension(type) {
+    const extensions = {
+      'photo': 'jpg',
+      'video': 'mp4',
+      'audio': 'mp3',
+      'voice': 'ogg',
+      'document': 'bin'
+    };
+    
+    return extensions[type] || 'bin';
+  }
+
   sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  // Control methods
   pause() {
     this.isActive = false;
     console.log(`⏸️ [${this.clientId}] Forwarding paused`);
@@ -360,7 +441,6 @@ class SingleClientForwarder {
     }
   }
 
-  // Method to manually refresh groups list
   async refreshGroups() {
     if (this.isWhatsAppReady) {
       await this.displayAvailableChats();
@@ -458,10 +538,8 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
-// Global manager instance
 const manager = new MultiClientManager();
 
-// Enhanced web endpoint to show status with group information
 app.get('/', (req, res) => {
   const clientStatus = manager.getAllStatus();
   
@@ -478,12 +556,10 @@ app.get('/', (req, res) => {
   });
 });
 
-// Status endpoint
 app.get('/status', (req, res) => {
   res.json(manager.getAllStatus());
 });
 
-// Groups endpoint
 app.get('/groups', (req, res) => {
   const allGroups = {};
   manager.clients.forEach(client => {
@@ -492,7 +568,6 @@ app.get('/groups', (req, res) => {
   res.json(allGroups);
 });
 
-// Refresh groups endpoint
 app.post('/client/:clientId/refresh-groups', async (req, res) => {
   const client = manager.getClient(req.params.clientId);
   if (client) {
@@ -507,7 +582,6 @@ app.post('/client/:clientId/refresh-groups', async (req, res) => {
   }
 });
 
-// Control endpoints
 app.post('/client/:clientId/pause', (req, res) => {
   const client = manager.getClient(req.params.clientId);
   if (client) {
@@ -528,16 +602,13 @@ app.post('/client/:clientId/resume', (req, res) => {
   }
 });
 
-// Start server and initialize clients
 app.listen(PORT, async () => {
   console.log(`🌐 Server running on port ${PORT}`);
   console.log(`🔗 Access status at: http://localhost:${PORT}`);
   
-  // Initialize the multi-client manager
   await manager.initialize();
 });
 
-// Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('\n🛑 Graceful shutdown initiated...');
   
