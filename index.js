@@ -626,6 +626,82 @@ class MultiClientManager {
       }));
       res.json(clientStats);
     });
+    this.app.post('/clients/:clientId/start', async (req, res) => {
+    try {
+      await this.startClient(req.params.clientId);
+      res.json({ success: true, message: `Client ${req.params.clientId} started` });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+  this.app.post('/clients/:clientId/stop', async (req, res) => {
+    try {
+      await this.stopClient(req.params.clientId);
+      res.json({ success: true, message: `Client ${req.params.clientId} stopped` });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+  this.app.post('/clients/:clientId/pause', (req, res) => {
+    const client = this.clients.get(req.params.clientId);
+    if (client) {
+      client.pause();
+      res.json({ success: true, message: `Client ${req.params.clientId} paused` });
+    } else {
+      res.status(404).json({ success: false, error: 'Client not found' });
+    }
+  });
+  this.app.post('/clients/:clientId/resume', (req, res) => {
+    const client = this.clients.get(req.params.clientId);
+    if (client) {
+      client.resume();
+      res.json({ success: true, message: `Client ${req.params.clientId} resumed` });
+    } else {
+      res.status(404).json({ success: false, error: 'Client not found' });
+    }
+  });
+  this.app.post('/clients/:clientId/skip', (req, res) => {
+    const client = this.clients.get(req.params.clientId);
+    if (client) {
+      const skipped = client.skipCurrentMessage();
+      res.json({ 
+        success: true, 
+        message: skipped ? `Skipped current message for ${req.params.clientId}` : `No message to skip for ${req.params.clientId}`
+      });
+    } else {
+      res.status(404).json({ success: false, error: 'Client not found' });
+    }
+  });
+  this.app.post('/clients/:clientId/toggle-whatsapp', async (req, res) => {
+    const client = this.clients.get(req.params.clientId);
+    if (!client) {
+      return res.status(404).json({ success: false, error: 'Client not found' });
+    }
+    const { skip } = req.body; // true to skip, false to enable
+    
+    try {
+      // Update config
+      client.config.skipWhatsApp = skip;
+      
+      if (skip) {
+        // Disable WhatsApp
+        if (client.whatsappClient) {
+          await client.whatsappClient.destroy();
+          client.whatsappClient = null;
+        }
+        client.isWhatsAppReady = false;
+        console.log(`📵 [${req.params.clientId}] WhatsApp disabled`);
+        res.json({ success: true, message: `WhatsApp disabled for ${req.params.clientId}` });
+      } else {
+        // Enable WhatsApp
+        console.log(`📱 [${req.params.clientId}] Enabling WhatsApp...`);
+        await client.initializeWhatsApp();
+        res.json({ success: true, message: `WhatsApp enabled for ${req.params.clientId} - check logs for QR code` });
+      }
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
 
     // Dashboard HTML
     this.app.get('/dashboard', (req, res) => {
