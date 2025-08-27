@@ -20,6 +20,7 @@ class SingleClientForwarder {
     this.isActive = true; // Control forwarding
     this.totalMessages = 0;
     this.failedMessages = 0;
+    this.availableGroups = []; // Store available groups
   }
 
   async initializeWhatsApp() {
@@ -69,13 +70,29 @@ class SingleClientForwarder {
       console.log(`\n[${this.clientId}] After scanning, wait for connection...\n`);
     });
 
-    // FIXED: Uncommented the ready event handler
+    // Enhanced ready event handler with better error handling
     this.whatsappClient.on("ready", async () => {
       console.log(`✅ [${this.clientId}] WhatsApp client is ready!`);
       this.isWhatsAppReady = true;
       this.reconnectAttempts = 0;
-      await this.displayAvailableChats();
-      this.processMessageQueue();
+      
+      // Add delay to ensure WhatsApp is fully loaded
+      setTimeout(async () => {
+        try {
+          await this.displayAvailableChats();
+          this.processMessageQueue();
+        } catch (error) {
+          console.error(`❌ [${this.clientId}] Error displaying chats:`, error.message);
+          // Retry after 5 seconds
+          setTimeout(async () => {
+            try {
+              await this.displayAvailableChats();
+            } catch (retryError) {
+              console.error(`❌ [${this.clientId}] Retry failed:`, retryError.message);
+            }
+          }, 5000);
+        }
+      }, 3000); // Wait 3 seconds after ready event
     });
 
     this.whatsappClient.on('loading_screen', (percent, message) => {
@@ -98,6 +115,7 @@ class SingleClientForwarder {
     this.whatsappClient.on("disconnected", (reason) => {
       console.log(`⚠️ [${this.clientId}] WhatsApp disconnected:`, reason);
       this.isWhatsAppReady = false;
+      this.availableGroups = []; // Clear groups on disconnect
       this.handleWhatsAppReconnect();
     });
 
@@ -106,24 +124,58 @@ class SingleClientForwarder {
 
   async displayAvailableChats() {
     try {
+      console.log(`📋 [${this.clientId}] Fetching WhatsApp chats...`);
+      
+      // Get all chats
       const chats = await this.whatsappClient.getChats();
+      console.log(`📊 [${this.clientId}] Total chats found: ${chats.length}`);
+      
+      // Filter groups
       const groups = chats.filter((chat) => chat.isGroup);
+      console.log(`📊 [${this.clientId}] Groups found: ${groups.length}`);
+      
+      // Store groups for API access
+      this.availableGroups = groups.map(group => ({
+        name: group.name,
+        id: group.id._serialized,
+        participants: group.participants ? group.participants.length : 0
+      }));
       
       console.log(`\n📋 [${this.clientId}] Available WhatsApp Groups:`);
       console.log("=====================================");
       
       if (groups.length === 0) {
-        console.log(`[${this.clientId}] No groups found.`);
+        console.log(`❌ [${this.clientId}] No groups found. Make sure you're added to WhatsApp groups.`);
         return;
       }
 
       groups.forEach((group, index) => {
+        const participantCount = group.participants ? group.participants.length : 0;
         console.log(`${index + 1}. ${group.name}`);
-        console.log(`   ID: ${group.id._serialized}`);
+        console.log(`   📍 ID: ${group.id._serialized}`);
+        console.log(`   👥 Participants: ${participantCount}`);
+        console.log(`   📅 Created: ${group.createdAt ? new Date(group.createdAt.low * 1000).toLocaleDateString() : 'Unknown'}`);
+        console.log('');
       });
       console.log("=====================================\n");
+      
+      // Also display individual chats count
+      const individualChats = chats.filter(chat => !chat.isGroup);
+      console.log(`📊 [${this.clientId}] Individual chats: ${individualChats.length}`);
+      console.log(`📊 [${this.clientId}] Total chats: ${chats.length}\n`);
+      
     } catch (error) {
       console.error(`❌ [${this.clientId}] Error getting chats:`, error.message);
+      console.error(`❌ [${this.clientId}] Error details:`, error);
+      
+      // Try alternative method
+      try {
+        console.log(`🔄 [${this.clientId}] Trying alternative method to get chats...`);
+        const state = await this.whatsappClient.getState();
+        console.log(`📊 [${this.clientId}] WhatsApp state: ${state}`);
+      } catch (stateError) {
+        console.error(`❌ [${this.clientId}] Could not get WhatsApp state:`, stateError.message);
+      }
     }
   }
 
@@ -308,6 +360,16 @@ class SingleClientForwarder {
     }
   }
 
+  // Method to manually refresh groups list
+  async refreshGroups() {
+    if (this.isWhatsAppReady) {
+      await this.displayAvailableChats();
+      return this.availableGroups;
+    } else {
+      throw new Error('WhatsApp client not ready');
+    }
+  }
+
   getStatus() {
     return {
       clientId: this.clientId,
@@ -316,7 +378,8 @@ class SingleClientForwarder {
       queueLength: this.messageQueue.length,
       totalMessages: this.totalMessages,
       failedMessages: this.failedMessages,
-      isProcessingQueue: this.isProcessingQueue
+      isProcessingQueue: this.isProcessingQueue,
+      availableGroups: this.availableGroups
     };
   }
 }
@@ -398,7 +461,7 @@ app.use(express.json());
 // Global manager instance
 const manager = new MultiClientManager();
 
-// FIXED: Added web endpoint to show status
+// Enhanced web endpoint to show status with group information
 app.get('/', (req, res) => {
   const clientStatus = manager.getAllStatus();
   
@@ -409,7 +472,8 @@ app.get('/', (req, res) => {
     summary: {
       totalClients: clientStatus.length,
       readyClients: clientStatus.filter(c => c.isWhatsAppReady).length,
-      activeClients: clientStatus.filter(c => c.isActive).length
+      activeClients: clientStatus.filter(c => c.isActive).length,
+      totalGroups: clientStatus.reduce((sum, c) => sum + (c.availableGroups?.length || 0), 0)
     }
   });
 });
@@ -417,6 +481,30 @@ app.get('/', (req, res) => {
 // Status endpoint
 app.get('/status', (req, res) => {
   res.json(manager.getAllStatus());
+});
+
+// Groups endpoint
+app.get('/groups', (req, res) => {
+  const allGroups = {};
+  manager.clients.forEach(client => {
+    allGroups[client.clientId] = client.availableGroups || [];
+  });
+  res.json(allGroups);
+});
+
+// Refresh groups endpoint
+app.post('/client/:clientId/refresh-groups', async (req, res) => {
+  const client = manager.getClient(req.params.clientId);
+  if (client) {
+    try {
+      const groups = await client.refreshGroups();
+      res.json({ success: true, groups });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  } else {
+    res.status(404).json({ success: false, message: 'Client not found' });
+  }
 });
 
 // Control endpoints
