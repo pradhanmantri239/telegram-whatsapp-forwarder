@@ -1,8 +1,8 @@
-// Add at the beginning of your app
 if (process.env.CLEAR_SESSIONS === 'true') {
     console.log('🗑️ Clearing all sessions...');
     try {
-        await fs.rmdir('./sessions', { recursive: true });
+        const fs = require('fs');
+        fs.rmSync('./sessions', { recursive: true, force: true });
         console.log('✅ Sessions cleared');
     } catch (error) {
         console.log('❌ Error clearing sessions:', error.message);
