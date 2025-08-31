@@ -112,10 +112,11 @@ class SingleClientForwarder {
     this.readyTimeout = setTimeout(() => {
         console.log(`⚠️ [${this.clientId}] Ready timeout - forcing ready state...`);
         this.isWhatsAppReady = true;
-        this.processMessageQueue();
-          }, 120000); // 2 minutes
-    });
-
+        setTimeout(() => {
+            this.processMessageQueue();
+        }, 30000); // Wait 30 seconds for full loading
+}, 120000);
+        
     this.whatsappClient.on("ready", async () => {
     // ADD THIS LINE:
     if (this.readyTimeout) clearTimeout(this.readyTimeout);
