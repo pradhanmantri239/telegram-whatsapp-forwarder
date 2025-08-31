@@ -29,6 +29,8 @@ class SingleClientForwarder {
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 5;
     this.messageVariations = ["", " ", ".", "...", " ."];
+    this.readyTimeout = null;
+    this.authenticatedTime = null; 
     this.isActive = true;
     this.totalMessages = 0;
     this.failedMessages = 0;
@@ -102,14 +104,25 @@ class SingleClientForwarder {
     });
 
     this.whatsappClient.on("authenticated", (session) => {
-      console.log(`✅ [${this.clientId}] WhatsApp authenticated - session saved!`);
-      console.log(`🔐 [${this.clientId}] Future starts will use saved session (no QR needed)`);
+    console.log(`✅ [${this.clientId}] WhatsApp authenticated - session saved!`);
+    console.log(`🔐 [${this.clientId}] Future starts will use saved session (no QR needed)`);
+    
+    // ADD THESE LINES:
+    this.authenticatedTime = Date.now();
+    this.readyTimeout = setTimeout(() => {
+        console.log(`⚠️ [${this.clientId}] Ready timeout - forcing ready state...`);
+        this.isWhatsAppReady = true;
+        this.processMessageQueue();
+          }, 120000); // 2 minutes
     });
 
     this.whatsappClient.on("ready", async () => {
-      console.log(`🚀 [${this.clientId}] WhatsApp ready! Using ${this.reconnectAttempts === 0 ? 'saved session' : 'fresh connection'}`);
-      this.isWhatsAppReady = true;
-      this.reconnectAttempts = 0;
+    // ADD THIS LINE:
+    if (this.readyTimeout) clearTimeout(this.readyTimeout);
+    
+    console.log(`🚀 [${this.clientId}] WhatsApp ready! Using ${this.reconnectAttempts === 0 ? 'saved session' : 'fresh connection'}`);
+    this.isWhatsAppReady = true;
+    this.reconnectAttempts = 0;
       
       setTimeout(async () => {
         try {
