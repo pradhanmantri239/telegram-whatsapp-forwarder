@@ -1,3 +1,14 @@
+// Add at the beginning of your app
+if (process.env.CLEAR_SESSIONS === 'true') {
+    console.log('🗑️ Clearing all sessions...');
+    try {
+        await fs.rmdir('./sessions', { recursive: true });
+        console.log('✅ Sessions cleared');
+    } catch (error) {
+        console.log('❌ Error clearing sessions:', error.message);
+    }
+    process.exit(0);
+}
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const TelegramBot = require('node-telegram-bot-api');
 const qrcode = require('qrcode-terminal');
